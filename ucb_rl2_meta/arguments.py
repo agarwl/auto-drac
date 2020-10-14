@@ -169,6 +169,23 @@ parser.add_argument(
     default=0.1, 
     help='exploration coefficient for UCB')
 
+# PSE Arguments
+parser.add_argument(
+    '--use_pse',
+    action='store_true',
+    default=False,
+    help='Use PSE with DraC')
+parser.add_argument(
+    '--pse_gamma',
+    type=float,
+    default=0.1,
+    help='Gamma term for PSM')
+parser.add_argument(
+    '--pse_coef',
+    type=float,
+    default=0.0,
+    help='coefficient for the PSE loss')
+
 # RL^2 Arguments.
 parser.add_argument(
     '--use_rl2',

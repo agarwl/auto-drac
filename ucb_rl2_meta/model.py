@@ -87,14 +87,14 @@ class Conv2d_tf(nn.Conv2d):
 
 class Policy(nn.Module):
     """
-    Actor-Critic module 
+    Actor-Critic module
     """
     def __init__(self, obs_shape, num_actions, base_kwargs=None):
         super(Policy, self).__init__()
-        
+
         if base_kwargs is None:
             base_kwargs = {}
-        
+
         if len(obs_shape) == 3:
             base = ResNetBase
         elif len(obs_shape) == 1:
@@ -102,7 +102,15 @@ class Policy(nn.Module):
 
         self.base = base(obs_shape[0], **base_kwargs)
         self.dist = Categorical(self.base.output_size, num_actions)
-        
+
+        # Projection layer as used by SimCLR
+        hidden_size = base_kwargs['hidden_size']
+        self.representation_layer = init_relu_(nn.Linear(hidden_size, 256))
+
+    def representation(self, inputs, rnn_hxs, masks):
+        _, actor_features, _ = self.base(inputs, rnn_hxs, masks)
+        return self.representation_layer(actor_features)
+
     @property
     def is_recurrent(self):
         return self.base.is_recurrent

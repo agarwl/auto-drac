@@ -23,7 +23,7 @@ from ucb_rl2_meta.envs import VecPyTorchProcgen, TransposeImageProcgen
 from ucb_rl2_meta.arguments import parser
 import data_augs
 
-aug_to_func = {    
+aug_to_func = {
         'crop': data_augs.Crop,
         'random-conv': data_augs.RandomConv,
         'grayscale': data_augs.Grayscale,
@@ -68,12 +68,12 @@ def train(args):
                                 envs.observation_space.shape, envs.action_space,
                                 actor_critic.recurrent_hidden_state_size,
                                 aug_type=args.aug_type, split_ratio=args.split_ratio)
-        
+
     batch_size = int(args.num_processes * args.num_steps / args.num_mini_batch)
 
     if args.use_ucb:
         aug_id = data_augs.Identity
-        aug_list = [aug_to_func[t](batch_size=batch_size) 
+        aug_list = [aug_to_func[t](batch_size=batch_size)
             for t in list(aug_to_func.keys())]
 
         agent = algo.UCBDrAC(
@@ -91,7 +91,8 @@ def train(args):
             aug_coef=args.aug_coef,
             num_aug_types=len(list(aug_to_func.keys())),
             ucb_exploration_coef=args.ucb_exploration_coef,
-            ucb_window_length=args.ucb_window_length)
+            ucb_window_length=args.ucb_window_length,
+            **pse_kwargs)
 
     elif args.use_meta_learning: 
         aug_id = data_augs.Identity
@@ -156,6 +157,13 @@ def train(args):
         aug_id = data_augs.Identity
         aug_func = aug_to_func[args.aug_type](batch_size=batch_size)
 
+        pse_coef = args.pse_coef
+        if args.use_pse:
+            assert args.pse_coef > 0, "Please pass a non-zero pse_coef"
+        else:
+            pse_coef = 0.0
+        print("Running DraC with pse_coef: {}".format(pse_coef))
+
         agent = algo.DrAC(
             actor_critic,
             args.clip_param,
@@ -169,7 +177,9 @@ def train(args):
             aug_id=aug_id,
             aug_func=aug_func,
             aug_coef=args.aug_coef,
-            env_name=args.env_name)
+            env_name=args.env_name,
+            pse_gamma=args.pse_gamma,
+            pse_coef=pse_coef)
 
     obs = envs.reset()
     rollouts.obs[0].copy_(obs)
@@ -216,7 +226,10 @@ def train(args):
 
         if args.use_ucb and j > 0:
             agent.update_ucb_values(rollouts)
-        value_loss, action_loss, dist_entropy = agent.update(rollouts)    
+        if args.use_pse:
+            value_loss, action_loss, dist_entropy, pse_loss = agent.update(rollouts)
+        else:
+            value_loss, action_loss, dist_entropy = agent.update(rollouts)
         rollouts.after_update()
 
         # save for every interval-th episode or for the last epoch
@@ -235,6 +248,8 @@ def train(args):
             logger.logkv("losses/dist_entropy", dist_entropy)
             logger.logkv("losses/value_loss", value_loss)
             logger.logkv("losses/action_loss", action_loss)
+            if args.use_pse:
+                logger.logkv("losses/pse_loss", pse_loss)
 
             logger.logkv("train/mean_episode_reward", np.mean(episode_rewards))
             logger.logkv("train/median_episode_reward", np.median(episode_rewards))

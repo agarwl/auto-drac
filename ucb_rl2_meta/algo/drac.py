@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import random 
+from ucb_rl2_meta.algo import contrastive_helpers as chs
 
 class DrAC():
     """
@@ -21,7 +22,9 @@ class DrAC():
                  aug_id=None,
                  aug_func=None,
                  aug_coef=0.1,
-                 env_name=None):
+                 env_name=None,
+                 pse_gamma=0.1,
+                 pse_coef=0.1):
 
         self.actor_critic = actor_critic
 
@@ -35,12 +38,15 @@ class DrAC():
         self.max_grad_norm = max_grad_norm
 
         self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
-        
+
         self.aug_id = aug_id
         self.aug_func = aug_func
         self.aug_coef = aug_coef
 
         self.env_name = env_name
+
+        self.pse_gamma = pse_gamma
+        self.pse_coef = pse_coef
 
     def update(self, rollouts):
         advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
@@ -50,6 +56,7 @@ class DrAC():
         value_loss_epoch = 0
         action_loss_epoch = 0
         dist_entropy_epoch = 0
+        pse_loss_epoch = 0
 
         for e in range(self.ppo_epoch):
             if self.actor_critic.is_recurrent:
@@ -59,15 +66,18 @@ class DrAC():
                 data_generator = rollouts.feed_forward_generator(
                     advantages, self.num_mini_batch)
 
+            if self.pse_coef > 0:
+                trajs_sampler = chs.TrajStorage(rollouts, aug_fn=self.aug_func)
+
             for sample in data_generator:
                 obs_batch, recurrent_hidden_states_batch, actions_batch, \
                 value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
                         adv_targ = sample
-                
+
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch,
                     actions_batch)
-                    
+
                 ratio = torch.exp(action_log_probs -
                                   old_action_log_probs_batch)
                 surr1 = ratio * adv_targ
@@ -82,10 +92,10 @@ class DrAC():
                     value_pred_clipped - return_batch).pow(2)
                 value_loss = 0.5 * torch.max(value_losses,
                                                 value_losses_clipped).mean()
-                
+
                 obs_batch_aug = self.aug_func.do_augmentation(obs_batch)
                 obs_batch_id = self.aug_id(obs_batch)
-                
+
                 _, new_actions_batch, _, _ = self.actor_critic.act(\
                     obs_batch_id, recurrent_hidden_states_batch, masks_batch)
                 values_aug, action_log_probs_aug, dist_entropy_aug, _ = \
@@ -95,19 +105,29 @@ class DrAC():
                 action_loss_aug = - action_log_probs_aug.mean()
                 value_loss_aug = .5 * (torch.detach(values) - values_aug).pow(2).mean()
 
+                # Compute PSE loss (naive attempt)
+                if self.pse_coef > 0:
+                    aug_traj_tuple =  trajs_sampler.sample_traj_pair()
+                    pse_loss = chs.representation_alignment_loss(
+                        self.actor_critic, aug_traj_tuple, gamma=self.pse_gamma)
+                else:
+                    pse_loss = torch.zeros(1)
+
                 # Update actor-critic using both PPO and Augmented Loss
                 self.optimizer.zero_grad()
                 aug_loss = value_loss_aug + action_loss_aug
                 (value_loss * self.value_loss_coef + action_loss -
-                    dist_entropy * self.entropy_coef + 
-                    aug_loss * self.aug_coef).backward()
+                    dist_entropy * self.entropy_coef +
+                    aug_loss * self.aug_coef +
+                    pse_loss * self.pse_coef).backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                         self.max_grad_norm)
-                self.optimizer.step()  
-                                
+                self.optimizer.step()
+
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
+                pse_loss_epoch += pse_loss.item()
 
                 if self.aug_func:
                     self.aug_func.change_randomization_params_all()
@@ -117,5 +137,6 @@ class DrAC():
         value_loss_epoch /= num_updates
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
+        pse_loss_epoch /= num_updates
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, pse_loss_epoch
