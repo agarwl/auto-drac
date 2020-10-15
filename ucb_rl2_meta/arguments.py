@@ -185,6 +185,11 @@ parser.add_argument(
     type=float,
     default=0.0,
     help='coefficient for the PSE loss')
+parser.add_argument(
+    '--pse_temperature',
+    type=float,
+    default=0.1,
+    help='coefficient for the PSE temperature')
 
 # RL^2 Arguments.
 parser.add_argument(

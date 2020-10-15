@@ -162,7 +162,9 @@ def train(args):
             assert args.pse_coef > 0, "Please pass a non-zero pse_coef"
         else:
             pse_coef = 0.0
-        print("Running DraC with pse_coef: {}".format(pse_coef))
+        print("Running DraC ..")
+        print("PSE: {}, Coef: {}, Gamma: {}, Temp: {}".format(
+            args.use_pse, pse_coef, args.pse_gamma, args.pse_temperature))
 
         agent = algo.DrAC(
             actor_critic,
@@ -179,7 +181,8 @@ def train(args):
             aug_coef=args.aug_coef,
             env_name=args.env_name,
             pse_gamma=args.pse_gamma,
-            pse_coef=pse_coef)
+            pse_coef=pse_coef,
+            pse_temperature=args.pse_temperature)
 
     obs = envs.reset()
     rollouts.obs[0].copy_(obs)

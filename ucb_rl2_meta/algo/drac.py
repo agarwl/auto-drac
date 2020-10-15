@@ -24,7 +24,8 @@ class DrAC():
                  aug_coef=0.1,
                  env_name=None,
                  pse_gamma=0.1,
-                 pse_coef=0.1):
+                 pse_coef=0.1,
+                 pse_temperature=0.1):
 
         self.actor_critic = actor_critic
 
@@ -47,6 +48,7 @@ class DrAC():
 
         self.pse_gamma = pse_gamma
         self.pse_coef = pse_coef
+        self.pse_temperature = pse_temperature
 
     def update(self, rollouts):
         advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
@@ -109,7 +111,9 @@ class DrAC():
                 if self.pse_coef > 0:
                     aug_traj_tuple =  trajs_sampler.sample_traj_pair()
                     pse_loss = chs.representation_alignment_loss(
-                        self.actor_critic, aug_traj_tuple, gamma=self.pse_gamma)
+                        self.actor_critic, aug_traj_tuple,
+                        temperature=self.pse_temperature,
+                        gamma=self.pse_gamma)
                 else:
                     pse_loss = torch.zeros(1)
 
