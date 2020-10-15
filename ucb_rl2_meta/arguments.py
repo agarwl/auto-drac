@@ -172,8 +172,8 @@ parser.add_argument(
 # PSE Arguments
 parser.add_argument(
     '--use_pse',
-    action='store_true',
-    default=False,
+    type=int,
+    default=0,
     help='Use PSE with DraC')
 parser.add_argument(
     '--pse_gamma',
