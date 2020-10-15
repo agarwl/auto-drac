@@ -11,7 +11,8 @@ from ucb_rl2_meta.model import Policy, AugCNN
 from ucb_rl2_meta.storage import RolloutStorage
 from test import evaluate
 
-from baselines import logger
+# from baselines import logger
+import cloud_logger as logger
 
 from procgen import ProcgenEnv
 from baselines.common.vec_env import (
@@ -47,7 +48,7 @@ def train(args):
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
     log_file = '-{}-{}-reproduce-s{}'.format(args.run_name, args.env_name, args.seed)
-    logger.configure(dir=args.log_dir, format_strs=['csv', 'stdout'], log_suffix=log_file)
+    logger.configure(dir=args.log_dir, format_strs=['csv', 'stdout', 'tensorboard'], log_suffix=log_file)
 
     venv = ProcgenEnv(num_envs=args.num_processes, env_name=args.env_name, \
         num_levels=args.num_levels, start_level=args.start_level, \
@@ -91,8 +92,7 @@ def train(args):
             aug_coef=args.aug_coef,
             num_aug_types=len(list(aug_to_func.keys())),
             ucb_exploration_coef=args.ucb_exploration_coef,
-            ucb_window_length=args.ucb_window_length,
-            **pse_kwargs)
+            ucb_window_length=args.ucb_window_length)
 
     elif args.use_meta_learning: 
         aug_id = data_augs.Identity
