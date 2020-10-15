@@ -386,8 +386,11 @@ def configure(dir=None, format_strs=None, comm=None, log_suffix=''):
         dir = osp.join(tempfile.gettempdir(),
             datetime.datetime.now().strftime("openai-%Y-%m-%d-%H-%M-%S-%f"))
     assert isinstance(dir, str)
-    dir = os.path.expanduser(dir)
-    gfile.makedirs(os.path.expanduser(dir))
+    if dir.startswith('gs://'):
+        gfile.makedirs(dir)
+    else:
+        dir = os.path.expanduser(dir)
+        gfile.makedirs(os.path.expanduser(dir))
 
     rank = get_rank_without_mpi_import()
     if rank > 0:
