@@ -38,6 +38,7 @@ aug_to_func = {
 
 def train(args):
     args.cuda = not args.no_cuda and torch.cuda.is_available()
+    print('Using CUDA: {}'.format(args.cuda))
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
