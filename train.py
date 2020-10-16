@@ -4,6 +4,7 @@ import time
 from collections import deque
 
 import numpy as np
+import tensorflow.compat.v1 as tf   # pylint: disabled=unused-import
 import torch
 
 from ucb_rl2_meta import algo, utils

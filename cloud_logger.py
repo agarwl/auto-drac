@@ -8,7 +8,7 @@ import datetime
 import tempfile
 from collections import defaultdict
 from contextlib import contextmanager
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 gfile = tf.io.gfile
 
 DEBUG = 10
@@ -29,7 +29,7 @@ class SeqWriter(object):
 class HumanOutputFormat(KVWriter, SeqWriter):
     def __init__(self, filename_or_file):
         if isinstance(filename_or_file, str):
-            tf.io.write_file(filename_or_file, "")
+            # tf.io.write_file(filename_or_file, "")
             self.file = gfile.GFile(filename_or_file, 'w')
             self.own_file = True
         else:
@@ -104,7 +104,7 @@ class JSONOutputFormat(KVWriter):
 
 class CSVOutputFormat(KVWriter):
     def __init__(self, filename):
-        tf.io.write_file(filename, "")
+        # tf.io.write_file(filename, "")
         self.file = gfile.GFile(filename, 'w+')
         self.keys = []
         self.sep = ','
@@ -154,11 +154,11 @@ class TensorBoardOutputFormat(KVWriter):
         else:
             path = osp.join(osp.abspath(dir), prefix)
         gfile.makedirs(path)
-        import tensorflow.compat.v1 as tf_fun
+        # import tensorflow.compat.v1 as tf_fun
         from tensorflow.python import _pywrap_events_writer
         from tensorflow.core.util import event_pb2
         from tensorflow.python.util import compat
-        self.tf = tf_fun
+        self.tf = tf
         self.event_pb2 = event_pb2
         self.writer = _pywrap_events_writer.EventsWriter(compat.as_bytes(path))
 
