@@ -15,6 +15,8 @@ class TrajStorage(object):
 
         masks_indices = 1 - env_masks[:, 0]
         indices = masks_indices.nonzero()[:, 0].tolist()
+        if len(indices) < 2:
+          continue
         prev_index = indices[0]
         for index in indices[1:]:
           obs = env_obs[prev_index: index]
