@@ -187,7 +187,7 @@ class TensorBoardOutputFormat(KVWriter):
 def make_output_format(format, ev_dir, log_suffix='', init_step=0):
     gfile.makedirs(ev_dir)
     if format == 'stdout':
-        return HumanOutputFormat(sys.stdout)
+        return HumanOutputFormat(sys.stdout, init_step=init_step)
     elif format == 'log':
         return HumanOutputFormat(osp.join(ev_dir, 'log%s.txt' % log_suffix), init_step=init_step)
     elif format == 'json':
