@@ -29,8 +29,10 @@ class SeqWriter(object):
 class HumanOutputFormat(KVWriter, SeqWriter):
     def __init__(self, filename_or_file):
         if isinstance(filename_or_file, str):
-            # tf.io.write_file(filename_or_file, "")
-            self.file = gfile.GFile(filename_or_file, 'w')
+            # This hack is needed since gfile doesn't create a new file.
+            if not gfile.exists(filename_or_file):
+                tf.io.write_file(filename_or_file, "")
+            self.file = gfile.GFile(filename_or_file, 'a+')
             self.own_file = True
         else:
             assert hasattr(filename_or_file, 'read'), 'expected file or str, got %s'%filename_or_file
@@ -90,7 +92,10 @@ class HumanOutputFormat(KVWriter, SeqWriter):
 
 class JSONOutputFormat(KVWriter):
     def __init__(self, filename):
-        self.file = gfile.GFile(filename, 'w')
+        # This hack is needed since gfile doesn't create a new file.
+        if not gfile.exists(filename):
+            tf.io.write_file(filename, "")
+        self.file = gfile.GFile(filename, 'a+')
 
     def writekvs(self, kvs):
         for k, v in sorted(kvs.items()):
@@ -104,8 +109,9 @@ class JSONOutputFormat(KVWriter):
 
 class CSVOutputFormat(KVWriter):
     def __init__(self, filename):
-        # tf.io.write_file(filename, "")
-        self.file = gfile.GFile(filename, 'w+')
+        if not gfile.exists(filename):
+            tf.io.write_file(filename, "")
+        self.file = gfile.GFile(filename, 'a+')
         self.keys = []
         self.sep = ','
 
@@ -144,10 +150,10 @@ class TensorBoardOutputFormat(KVWriter):
     """
     Dumps key/value pairs into TensorBoard's numeric format.
     """
-    def __init__(self, dir):
+    def __init__(self, dir, init_step=1):
         gfile.makedirs(dir)
         self.dir = dir
-        self.step = 1
+        self.step = init_step
         prefix = 'events'
         if dir.startswith('gs://'):
             path = osp.join(dir, prefix)
@@ -178,7 +184,7 @@ class TensorBoardOutputFormat(KVWriter):
             self.writer.Close()
             self.writer = None
 
-def make_output_format(format, ev_dir, log_suffix=''):
+def make_output_format(format, ev_dir, log_suffix='', init_step=1):
     gfile.makedirs(ev_dir)
     if format == 'stdout':
         return HumanOutputFormat(sys.stdout)
@@ -189,7 +195,7 @@ def make_output_format(format, ev_dir, log_suffix=''):
     elif format == 'csv':
         return CSVOutputFormat(osp.join(ev_dir, 'progress%s.csv' % log_suffix))
     elif format == 'tensorboard':
-        return TensorBoardOutputFormat(osp.join(ev_dir, 'tb%s' % log_suffix))
+        return TensorBoardOutputFormat(osp.join(ev_dir, 'tb%s' % log_suffix), init_step=init_step)
     else:
         raise ValueError('Unknown format specified: %s' % (format,))
 
@@ -376,7 +382,7 @@ def get_rank_without_mpi_import():
     return 0
 
 
-def configure(dir=None, format_strs=None, comm=None, log_suffix=''):
+def configure(dir=None, format_strs=None, comm=None, log_suffix='', init_step=1):
     """
     If comm is provided, average all numerical stats across that comm
     """
@@ -402,7 +408,7 @@ def configure(dir=None, format_strs=None, comm=None, log_suffix=''):
         else:
             format_strs = os.getenv('OPENAI_LOG_FORMAT_MPI', 'log').split(',')
     format_strs = filter(None, format_strs)
-    output_formats = [make_output_format(f, dir, log_suffix) for f in format_strs]
+    output_formats = [make_output_format(f, dir, log_suffix, init_step=init_step) for f in format_strs]
 
     Logger.CURRENT = Logger(dir=dir, output_formats=output_formats, comm=comm)
     if output_formats:

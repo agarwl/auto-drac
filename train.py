@@ -1,6 +1,7 @@
 import copy
 import os
 import time
+import io
 from collections import deque
 
 import numpy as np
@@ -35,6 +36,7 @@ aug_to_func = {
         'cutout-color': data_augs.CutoutColor,
         'color-jitter': data_augs.ColorJitter,
 }
+gfile = tf.io.gfile
 
 def train(args):
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -43,14 +45,18 @@ def train(args):
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
-    log_dir = os.path.expanduser(args.log_dir)
-    utils.cleanup_log_dir(log_dir)
+    log_dir = args.log_dir
+    if not log_dir.startswith('gs://'):
+        log_dir = os.path.expanduser(args.log_dir)
+    if not args.preempt:
+        utils.cleanup_log_dir(log_dir)
+    save_dir = os.path.join(log_dir, 'checkpoints')
+    gfile.makedirs(save_dir)
 
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
     log_file = '-{}-{}-reproduce-s{}'.format(args.run_name, args.env_name, args.seed)
-    logger.configure(dir=args.log_dir, format_strs=['csv', 'stdout', 'tensorboard'], log_suffix=log_file)
 
     venv = ProcgenEnv(num_envs=args.num_processes, env_name=args.env_name, \
         num_levels=args.num_levels, start_level=args.start_level, \
@@ -59,12 +65,12 @@ def train(args):
     venv = VecMonitor(venv=venv, filename=None, keep_buf=100)
     venv = VecNormalize(venv=venv, ob=False)
     envs = VecPyTorchProcgen(venv, device)
-    
+
     obs_shape = envs.observation_space.shape
     actor_critic = Policy(
         obs_shape,
         envs.action_space.n,
-        base_kwargs={'recurrent': False, 'hidden_size': args.hidden_size})        
+        base_kwargs={'recurrent': False, 'hidden_size': args.hidden_size})
     actor_critic.to(device)
 
     rollouts = RolloutStorage(args.num_steps, args.num_processes,
@@ -96,13 +102,13 @@ def train(args):
             ucb_exploration_coef=args.ucb_exploration_coef,
             ucb_window_length=args.ucb_window_length)
 
-    elif args.use_meta_learning: 
+    elif args.use_meta_learning:
         aug_id = data_augs.Identity
         aug_list = [aug_to_func[t](batch_size=batch_size) \
             for t in list(aug_to_func.keys())]
 
         aug_model = AugCNN()
-        aug_model.to(device) 
+        aug_model.to(device)
 
         agent = algo.MetaDrAC(
             actor_critic,
@@ -121,16 +127,16 @@ def train(args):
             aug_id=aug_id,
             aug_coef=args.aug_coef)
 
-    elif args.use_rl2: 
+    elif args.use_rl2:
         aug_id = data_augs.Identity
-        aug_list = [aug_to_func[t](batch_size=batch_size) 
+        aug_list = [aug_to_func[t](batch_size=batch_size)
             for t in list(aug_to_func.keys())]
 
         rl2_obs_shape = [envs.action_space.n + 1]
         rl2_learner = Policy(
             rl2_obs_shape,
             len(list(aug_to_func.keys())),
-            base_kwargs={'recurrent': True, 'hidden_size': args.rl2_hidden_size})    
+            base_kwargs={'recurrent': True, 'hidden_size': args.rl2_hidden_size})
         rl2_learner.to(device)
  
         agent = algo.RL2DrAC(
@@ -150,9 +156,9 @@ def train(args):
                 aug_list=aug_list,
                 aug_id=aug_id,
                 aug_coef=args.aug_coef,
-                num_aug_types=len(list(aug_to_func.keys())), 
-                recurrent_hidden_size=args.rl2_hidden_size, 
-                num_actions=envs.action_space.n, 
+                num_aug_types=len(list(aug_to_func.keys())),
+                recurrent_hidden_size=args.rl2_hidden_size,
+                num_actions=envs.action_space.n,
                 device=device)
 
     elif args.use_rad:
@@ -217,6 +223,20 @@ def train(args):
             pse_coef=pse_coef,
             pse_temperature=args.pse_temperature)
 
+    checkpoint_path = os.path.join(save_dir, "agent" + log_file + ".pt")
+    if gfile.exists(checkpoint_path) and args.preempt:
+        with gfile.GFile(checkpoint_path, 'rb') as f:
+            inbuffer = io.BytesIO(f.read())
+            checkpoint = torch.load(inbuffer)
+        agent.actor_critic.load_state_dict(checkpoint['model_state_dict'])
+        agent.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        init_epoch = checkpoint['epoch'] + 1
+        print('Loaded ckpt from epoch {}'.format(init_epoch - 1))
+        logger.configure(dir=args.log_dir, format_strs=['csv', 'stdout', 'tensorboard'], log_suffix=log_file, init_step=init_epoch)
+    else:
+        init_epoch = 0
+        logger.configure(dir=args.log_dir, format_strs=['csv', 'stdout', 'tensorboard'], log_suffix=log_file, init_step=init_epoch)
+
     obs = envs.reset()
     rollouts.obs[0].copy_(obs)
     rollouts.to(device)
@@ -225,7 +245,7 @@ def train(args):
     num_updates = int(
         args.num_env_steps) // args.num_steps // args.num_processes
 
-    for j in range(num_updates):
+    for j in range(init_epoch, num_updates):
         actor_critic.train()
         for step in range(args.num_steps):
             # Sample actions
@@ -295,6 +315,25 @@ def train(args):
 
             logger.dumpkvs()
 
+        # Save Model
+        if (j > 0 and j % args.save_interval == 0
+                or j == num_updates - 1) and save_dir != "":
+            try:
+                gfile.makedirs(save_dir)
+            except OSError:
+                pass
+
+            ckpt_file = os.path.join(save_dir, "agent" + log_file + ".pt")
+            outbuffer = io.BytesIO()
+            torch.save({
+                'epoch': j,
+                'model_state_dict': agent.actor_critic.state_dict(),
+                'optimizer_state_dict': agent.optimizer.state_dict()}, outbuffer)
+            with gfile.GFile(ckpt_file, 'wb') as fout:
+                fout.write(outbuffer.getvalue())
+            save_num_steps = (j + 1) * args.num_processes * args.num_steps
+
+            print("\nUpdate {}, step {}, Saved {}.".format(j, save_num_steps, ckpt_file))
 
 if __name__ == "__main__":
     args = parser.parse_args()
