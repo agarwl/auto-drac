@@ -132,6 +132,11 @@ parser.add_argument(
 
 # DrAC Arguments.
 parser.add_argument(
+    '--use_rad',
+    type=int,
+    default=0,
+    help='Use RAD')
+parser.add_argument(
     '--aug_type',
     type=str,
     default='crop',

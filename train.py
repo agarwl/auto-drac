@@ -155,6 +155,35 @@ def train(args):
                 num_actions=envs.action_space.n, 
                 device=device)
 
+    elif args.use_rad:
+        aug_id = data_augs.Identity
+        aug_func = aug_to_func[args.aug_type](batch_size=batch_size)
+
+        pse_coef = args.pse_coef
+        if args.use_pse:
+            assert args.pse_coef > 0, "Please pass a non-zero pse_coef"
+        else:
+            pse_coef = 0.0
+        print("Running RAD ..")
+        print("PSE: {}, Coef: {}, Gamma: {}, Temp: {}".format(
+            args.use_pse, pse_coef, args.pse_gamma, args.pse_temperature))
+
+        agent = algo.RAD(
+            actor_critic,
+            args.clip_param,
+            args.ppo_epoch,
+            args.num_mini_batch,
+            args.value_loss_coef,
+            args.entropy_coef,
+            lr=args.lr,
+            eps=args.eps,
+            max_grad_norm=args.max_grad_norm,
+            aug_id=aug_id,
+            aug_func=aug_func,
+            env_name=args.env_name,
+            pse_gamma=args.pse_gamma,
+            pse_coef=pse_coef,
+            pse_temperature=args.pse_temperature)
     else:
         aug_id = data_augs.Identity
         aug_func = aug_to_func[args.aug_type](batch_size=batch_size)
@@ -206,7 +235,7 @@ def train(args):
 
             # Obser reward and next obs
             obs, reward, done, infos = envs.step(action)
-            
+
             for info in infos:
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
@@ -226,7 +255,7 @@ def train(args):
             next_value = actor_critic.get_value(
                 obs_id, rollouts.recurrent_hidden_states[-1],
                 rollouts.masks[-1]).detach()
-            
+
         rollouts.compute_returns(next_value, args.gamma, args.gae_lambda)
 
         if args.use_ucb and j > 0:
@@ -246,9 +275,9 @@ def train(args):
                         len(episode_rewards), np.mean(episode_rewards),
                         np.median(episode_rewards), dist_entropy, value_loss,
                         action_loss))
-            
+
             logger.logkv("train/nupdates", j)
-            logger.logkv("train/total_num_steps", total_num_steps)            
+            logger.logkv("train/total_num_steps", total_num_steps)
 
             logger.logkv("losses/dist_entropy", dist_entropy)
             logger.logkv("losses/value_loss", value_loss)
