@@ -50,13 +50,17 @@ def train(args):
         log_dir = os.path.expanduser(args.log_dir)
     if not args.preempt:
         utils.cleanup_log_dir(log_dir)
-    save_dir = os.path.join(log_dir, 'checkpoints')
-    gfile.makedirs(save_dir)
+    try:
+        gfile.makedirs(log_dir)
+    except:
+        pass
 
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
     log_file = '-{}-{}-reproduce-s{}'.format(args.run_name, args.env_name, args.seed)
+    save_dir = os.path.join(log_dir, 'checkpoints', log_file)
+    gfile.makedirs(save_dir)
 
     venv = ProcgenEnv(num_envs=args.num_processes, env_name=args.env_name, \
         num_levels=args.num_levels, start_level=args.start_level, \
