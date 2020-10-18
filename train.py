@@ -167,6 +167,7 @@ def train(args):
         print("Running RAD ..")
         print("PSE: {}, Coef: {}, Gamma: {}, Temp: {}".format(
             args.use_pse, pse_coef, args.pse_gamma, args.pse_temperature))
+        print('use_augmentation: {}'.format(args.use_augmentation))
 
         agent = algo.RAD(
             actor_critic,
@@ -181,6 +182,7 @@ def train(args):
             aug_id=aug_id,
             aug_func=aug_func,
             env_name=args.env_name,
+            use_augmentation=args.use_augmentation,
             pse_gamma=args.pse_gamma,
             pse_coef=pse_coef,
             pse_temperature=args.pse_temperature)
@@ -260,10 +262,7 @@ def train(args):
 
         if args.use_ucb and j > 0:
             agent.update_ucb_values(rollouts)
-        if args.use_pse:
-            value_loss, action_loss, dist_entropy, pse_loss = agent.update(rollouts)
-        else:
-            value_loss, action_loss, dist_entropy = agent.update(rollouts)
+        value_loss, action_loss, dist_entropy, pse_loss = agent.update(rollouts)
         rollouts.after_update()
 
         # save for every interval-th episode or for the last epoch

@@ -22,6 +22,7 @@ class RAD():
                  aug_id=None,
                  aug_func=None,
                  env_name=None,
+                 use_augmentation=True,
                  pse_gamma=0.1,
                  pse_coef=0.1,
                  pse_temperature=0.1):
@@ -41,6 +42,7 @@ class RAD():
 
         self.aug_id = aug_id
         self.aug_func = aug_func
+        self.use_augmentation = use_augmentation
 
         self.env_name = env_name
 
@@ -67,15 +69,16 @@ class RAD():
                     advantages, self.num_mini_batch)
 
             if self.pse_coef > 0:
-                trajs_sampler = chs.TrajStorage(rollouts, aug_fn=self.aug_func)
+                aug_func = self.aug_func if self.use_augmentation else None
+                trajs_sampler = chs.TrajStorage(rollouts, aug_fn=None)
 
             for sample in data_generator:
                 obs_batch, recurrent_hidden_states_batch, actions_batch, \
                 value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
                         adv_targ = sample
                 # RAD simply applies augmentation
-                obs_batch = self.aug_func.do_augmentation(obs_batch)
-                obs_batch_id = self.aug_id(obs_batch)
+                if self.use_augmentation:
+                    obs_batch = self.aug_func.do_augmentation(obs_batch)
 
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch,
@@ -108,9 +111,11 @@ class RAD():
 
                 # Update actor-critic using both PPO and Augmented Loss
                 self.optimizer.zero_grad()
-                (value_loss * self.value_loss_coef + action_loss -
-                    dist_entropy * self.entropy_coef +
-                    pse_loss * self.pse_coef).backward()
+                loss = (value_loss * self.value_loss_coef + action_loss -
+                    dist_entropy * self.entropy_coef)
+                if self.pse_coef > 0:
+                    loss += pse_loss * self.pse_coef
+                loss.backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                         self.max_grad_norm)
                 self.optimizer.step()

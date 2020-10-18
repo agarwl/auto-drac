@@ -137,6 +137,11 @@ parser.add_argument(
     default=0,
     help='Use RAD')
 parser.add_argument(
+    '--use_augmentation',
+    type=int,
+    default=1,
+    help='Use Data Augmentation or not')
+parser.add_argument(
     '--aug_type',
     type=str,
     default='crop',
