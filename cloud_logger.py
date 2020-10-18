@@ -27,10 +27,10 @@ class SeqWriter(object):
         raise NotImplementedError
 
 class HumanOutputFormat(KVWriter, SeqWriter):
-    def __init__(self, filename_or_file):
+    def __init__(self, filename_or_file, init_step):
         if isinstance(filename_or_file, str):
             # This hack is needed since gfile doesn't create a new file.
-            if not gfile.exists(filename_or_file):
+            if (init_step == 0) or (not gfile.exists(filename)):
                 tf.io.write_file(filename_or_file, "")
             self.file = gfile.GFile(filename_or_file, 'a+')
             self.own_file = True
@@ -91,9 +91,9 @@ class HumanOutputFormat(KVWriter, SeqWriter):
             self.file.close()
 
 class JSONOutputFormat(KVWriter):
-    def __init__(self, filename):
+    def __init__(self, filename, init_step):
         # This hack is needed since gfile doesn't create a new file.
-        if not gfile.exists(filename):
+        if (init_step == 0) or (not gfile.exists(filename)):
             tf.io.write_file(filename, "")
         self.file = gfile.GFile(filename, 'a+')
 
@@ -108,8 +108,8 @@ class JSONOutputFormat(KVWriter):
         self.file.close()
 
 class CSVOutputFormat(KVWriter):
-    def __init__(self, filename):
-        if not gfile.exists(filename):
+    def __init__(self, filename, init_step=0):
+        if (init_step == 0) or (not gfile.exists(filename)):
             tf.io.write_file(filename, "")
         self.file = gfile.GFile(filename, 'a+')
         self.keys = []
@@ -150,7 +150,7 @@ class TensorBoardOutputFormat(KVWriter):
     """
     Dumps key/value pairs into TensorBoard's numeric format.
     """
-    def __init__(self, dir, init_step=1):
+    def __init__(self, dir, init_step=0):
         gfile.makedirs(dir)
         self.dir = dir
         self.step = init_step
@@ -184,16 +184,16 @@ class TensorBoardOutputFormat(KVWriter):
             self.writer.Close()
             self.writer = None
 
-def make_output_format(format, ev_dir, log_suffix='', init_step=1):
+def make_output_format(format, ev_dir, log_suffix='', init_step=0):
     gfile.makedirs(ev_dir)
     if format == 'stdout':
         return HumanOutputFormat(sys.stdout)
     elif format == 'log':
-        return HumanOutputFormat(osp.join(ev_dir, 'log%s.txt' % log_suffix))
+        return HumanOutputFormat(osp.join(ev_dir, 'log%s.txt' % log_suffix), init_step=init_step)
     elif format == 'json':
-        return JSONOutputFormat(osp.join(ev_dir, 'progress%s.json' % log_suffix))
+        return JSONOutputFormat(osp.join(ev_dir, 'progress%s.json' % log_suffix), init_step=init_step)
     elif format == 'csv':
-        return CSVOutputFormat(osp.join(ev_dir, 'progress%s.csv' % log_suffix))
+        return CSVOutputFormat(osp.join(ev_dir, 'progress%s.csv' % log_suffix), init_step=init_step)
     elif format == 'tensorboard':
         return TensorBoardOutputFormat(osp.join(ev_dir, 'tb%s' % log_suffix), init_step=init_step)
     else:
@@ -382,7 +382,7 @@ def get_rank_without_mpi_import():
     return 0
 
 
-def configure(dir=None, format_strs=None, comm=None, log_suffix='', init_step=1):
+def configure(dir=None, format_strs=None, comm=None, log_suffix='', init_step=0):
     """
     If comm is provided, average all numerical stats across that comm
     """
