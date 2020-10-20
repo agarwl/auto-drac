@@ -100,7 +100,7 @@ class RAD():
                                                 value_losses_clipped).mean()
 
                 # Compute PSE loss (naive attempt)
-                if self.pse_coef > 0:
+                if self.pse_coef > 0 and (trajs_sampler.num_trajs > 0):
                     aug_traj_tuple =  trajs_sampler.sample_traj_pair()
                     pse_loss = chs.representation_alignment_loss(
                         self.actor_critic, aug_traj_tuple,
