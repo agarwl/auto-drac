@@ -177,8 +177,9 @@ def train(args):
         else:
             pse_coef = 0.0
         print("Running RAD ..")
-        print("PSE: {}, Coef: {}, Gamma: {}, Temp: {}".format(
-            args.use_pse, pse_coef, args.pse_gamma, args.pse_temperature))
+        print("PSE: {}, Coef: {}, Gamma: {}, Temp: {}, Coupling Temp: {}".format(
+            args.use_pse, pse_coef, args.pse_gamma, args.pse_temperature,
+            args.pse_coupling_temperature))
         print('use_augmentation: {}'.format(args.use_augmentation))
 
         agent = algo.RAD(
@@ -197,7 +198,8 @@ def train(args):
             use_augmentation=args.use_augmentation,
             pse_gamma=args.pse_gamma,
             pse_coef=pse_coef,
-            pse_temperature=args.pse_temperature)
+            pse_temperature=args.pse_temperature,
+            pse_coupling_temperature=args.pse_coupling_temperature)
     else:
         aug_id = data_augs.Identity
         aug_func = aug_to_func[args.aug_type](batch_size=batch_size)

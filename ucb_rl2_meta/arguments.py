@@ -205,6 +205,11 @@ parser.add_argument(
     type=float,
     default=0.1,
     help='coefficient for the PSE temperature')
+parser.add_argument(
+    '--pse_coupling_temperature',
+    type=float,
+    default=0.5,
+    help='coefficient for the PSM coupling temperature')
 
 # RL^2 Arguments.
 parser.add_argument(
