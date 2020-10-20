@@ -107,10 +107,11 @@ class Policy(nn.Module):
         hidden_size = base_kwargs['hidden_size']
         self.representation_layer = init_relu_(nn.Linear(hidden_size, 256))
         self.pi_operator = torch.nn.Softmax(dim=1)
+        self._relu = nn.ReLU()
 
     def representation(self, inputs, rnn_hxs, masks):
         _, actor_features, _ = self.base(inputs, rnn_hxs, masks)
-        return self.representation_layer(actor_features)
+        return self._relu(self.representation_layer(actor_features))
 
     @property
     def is_recurrent(self):

@@ -43,7 +43,7 @@ class TrajStorage(object):
 
 
 def metric_fixed_point(cost_matrix, gamma=0.99, eps=1e-7):
-  """DP for calculating PSM in environments with deterministic dynamics.
+  """DP for calculating PSM (approximately).
 
   Args:
     cost_matrix: DIST matrix where entries at index (i, j) is DIST(x_i, y_j)
