@@ -81,7 +81,8 @@ def train(args):
     rollouts = RolloutStorage(args.num_steps, args.num_processes,
                                 envs.observation_space.shape, envs.action_space,
                                 actor_critic.recurrent_hidden_state_size,
-                                aug_type=args.aug_type, split_ratio=args.split_ratio)
+                                aug_type=args.aug_type, split_ratio=args.split_ratio,
+                                store_policy=args.use_pse)
 
     batch_size = int(args.num_processes * args.num_steps / args.num_mini_batch)
 
@@ -256,9 +257,9 @@ def train(args):
             # Sample actions
             with torch.no_grad():
                 obs_id = aug_id(rollouts.obs[step])
-                value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
+                value, action, action_log_prob, recurrent_hidden_states, pi = actor_critic.act(
                     obs_id, rollouts.recurrent_hidden_states[step],
-                    rollouts.masks[step])
+                    rollouts.masks[step], policy=True)
 
             # Obser reward and next obs
             obs, reward, done, infos = envs.step(action)
@@ -275,7 +276,7 @@ def train(args):
                  for info in infos])
 
             rollouts.insert(obs, recurrent_hidden_states, action,
-                            action_log_prob, value, reward, masks, bad_masks)
+                            action_log_prob, value, reward, masks, bad_masks, pi=pi)
 
         with torch.no_grad():
             obs_id = aug_id(rollouts.obs[-1])

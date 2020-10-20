@@ -106,6 +106,7 @@ class Policy(nn.Module):
         # Projection layer as used by SimCLR
         hidden_size = base_kwargs['hidden_size']
         self.representation_layer = init_relu_(nn.Linear(hidden_size, 256))
+        self.pi_operator = torch.nn.Softmax(dim=1)
 
     def representation(self, inputs, rnn_hxs, masks):
         _, actor_features, _ = self.base(inputs, rnn_hxs, masks)
@@ -123,7 +124,7 @@ class Policy(nn.Module):
     def forward(self, inputs, rnn_hxs, masks):
         raise NotImplementedError
 
-    def act(self, inputs, rnn_hxs, masks, deterministic=False):
+    def act(self, inputs, rnn_hxs, masks, deterministic=False, policy=False):
         value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
         dist = self.dist(actor_features)
 
@@ -134,8 +135,11 @@ class Policy(nn.Module):
 
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
-
-        return value, action, action_log_probs, rnn_hxs
+        if policy:
+            pi = self.pi_operator(dist.logits)
+            return value, action, action_log_probs, rnn_hxs, pi
+        else:
+            return value, action, action_log_probs, rnn_hxs
 
     def get_value(self, inputs, rnn_hxs, masks):
         value, _, _ = self.base(inputs, rnn_hxs, masks)

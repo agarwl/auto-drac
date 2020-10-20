@@ -60,6 +60,10 @@ class RAD():
         dist_entropy_epoch = 0
         pse_loss_epoch = 0
 
+        if self.pse_coef > 0:
+            aug_func = self.aug_func if self.use_augmentation else None
+            trajs_sampler = chs.TrajStorage(rollouts, aug_fn=None)
+
         for e in range(self.ppo_epoch):
             if self.actor_critic.is_recurrent:
                 data_generator = rollouts.recurrent_generator(
@@ -67,10 +71,6 @@ class RAD():
             else:
                 data_generator = rollouts.feed_forward_generator(
                     advantages, self.num_mini_batch)
-
-            if self.pse_coef > 0:
-                aug_func = self.aug_func if self.use_augmentation else None
-                trajs_sampler = chs.TrajStorage(rollouts, aug_fn=None)
 
             for sample in data_generator:
                 obs_batch, recurrent_hidden_states_batch, actions_batch, \

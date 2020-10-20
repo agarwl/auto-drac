@@ -10,7 +10,7 @@ class TrajStorage(object):
       for env_index in range(num_processes):
         env_masks = rollouts.masks[:, env_index]
         env_obs = rollouts.obs[:, env_index]
-        env_actions = rollouts.actions[:, env_index, 0]
+        env_actions = rollouts.pi[:, env_index]
         env_recurrent_states = rollouts.recurrent_hidden_states[:, env_index]
 
         masks_indices = 1 - env_masks[:, 0]
@@ -67,10 +67,12 @@ def metric_fixed_point(cost_matrix, gamma=0.99, eps=1e-7):
       d = d_new[:]
   return d
 
+
 def _calculate_action_cost_matrix(actions_1, actions_2):
-  action_equality = torch.eq(
-      torch.unsqueeze(actions_1, dim=1), torch.unsqueeze(actions_2, dim=0))
-  return 1.0 - action_equality.type(torch.float32)
+  diff = torch.unsqueeze(actions_1, dim=1) - torch.unsqueeze(actions_2, dim=0)
+  tv_distance = 0.5 * torch.sum(torch.abs(diff), dim=2)
+  return tv_distance
+
 
 def contrastive_loss(similarity_matrix,
                      metric_values,
@@ -84,7 +86,7 @@ def contrastive_loss(similarity_matrix,
   ## metric_values = PSM(X, Y)
   soft_similarity_matrix = similarity_matrix / temperature
 
-  col_indices = torch.argmin(metric_values, axis=1)
+  col_indices = torch.argmin(metric_values, dim=1)
   pos_indices1 = (torch.arange(start=0, end=metric_shape[0],
                               dtype=torch.int64), col_indices)
 
@@ -96,7 +98,7 @@ def contrastive_loss(similarity_matrix,
   negative_weights[pos_indices1] +=  pos_weights1
   neg_logits1 = soft_similarity_matrix + negative_weights
 
-  neg_logits1 = torch.logsumexp(neg_logits1, axis=1)
+  neg_logits1 = torch.logsumexp(neg_logits1, dim=1)
   return torch.mean(neg_logits1 - pos_logits1) # Equation 4
 
 def representation_alignment_loss(nn_model,
@@ -114,7 +116,7 @@ def representation_alignment_loss(nn_model,
   alignment_loss = contrastive_loss(
       similarity_matrix,
       metric_vals,
-      temperature,
+      temperature=temperature,
       beta=coupling_temperature)
 
   return alignment_loss

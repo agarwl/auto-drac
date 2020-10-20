@@ -9,7 +9,7 @@ def _flatten_helper(T, N, _tensor):
 
 class RolloutStorage(object):
     def __init__(self, num_steps, num_processes, obs_shape, action_space,
-                 recurrent_hidden_state_size, aug_type=None, split_ratio=0.05):
+                 recurrent_hidden_state_size, aug_type=None, split_ratio=0.05, store_policy=False):
         self.obs = torch.zeros(num_steps + 1, num_processes, *obs_shape)
         self.recurrent_hidden_states = torch.zeros(
             num_steps + 1, num_processes, recurrent_hidden_state_size)
@@ -25,6 +25,9 @@ class RolloutStorage(object):
         if action_space.__class__.__name__ == 'Discrete':
             self.actions = self.actions.long()
         self.masks = torch.ones(num_steps + 1, num_processes, 1)
+        self._store_policy = store_policy
+        if self._store_policy:
+            self.pi = torch.zeros(num_steps, num_processes, action_space.n)
 
         # Masks that indicate whether it's a true terminal state
         # or time limit end state
@@ -32,7 +35,7 @@ class RolloutStorage(object):
 
         self.num_steps = num_steps
         self.step = 0
-        
+
         self.aug_type = aug_type
         self.split_ratio = split_ratio
 
@@ -46,9 +49,11 @@ class RolloutStorage(object):
         self.actions = self.actions.to(device)
         self.masks = self.masks.to(device)
         self.bad_masks = self.bad_masks.to(device)
+        if self._store_policy:
+            self.pi = self.pi.to(device)
 
     def insert(self, obs, recurrent_hidden_states, actions, action_log_probs,
-               value_preds, rewards, masks, bad_masks):
+               value_preds, rewards, masks, bad_masks, pi=None):
         if len(rewards.shape) == 3: rewards = rewards.squeeze(2)
         self.obs[self.step + 1].copy_(obs)
         self.recurrent_hidden_states[self.step +
@@ -59,6 +64,8 @@ class RolloutStorage(object):
         self.rewards[self.step].copy_(rewards)
         self.masks[self.step + 1].copy_(masks)
         self.bad_masks[self.step + 1].copy_(bad_masks)
+        if self._store_policy and (pi is not None):
+            self.pi[self.step].copy_(pi)
 
         self.step = (self.step + 1) % self.num_steps
 
